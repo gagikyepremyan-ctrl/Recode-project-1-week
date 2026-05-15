@@ -41,6 +41,11 @@ def main():
     subparsers.add_parser("parallel")
     subparsers.add_parser("order")
 
+    edit_parser = subparsers.add_parser("edit", help="Edit an existing step")
+    edit_parser.add_argument("index", type=int, help="ID of the step to edit")
+    edit_parser.add_argument("--name", help="New name for the step")
+    edit_parser.add_argument("--duration", type=int, help="New duration")
+    edit_parser.add_argument("--deps", nargs="*", help="New dependencies")
     args = parser.parse_args()
     output_file = "data.json"
     if hasattr(args, 'output'):
@@ -165,6 +170,36 @@ def main():
             for i, w in enumerate(waves, 1):
                 names = [steps[idx]['name'] for idx in w]
                 print(f"Wave {i}: {', '.join(names)}")
+    elif args.command == "edit":
+        if os.path.exists(output_file):
+            with open(output_file, "r") as f:
+                recipe_list = json.load(f)
+            step_to_edit = next((s for s in recipe_list if s.get('index') == args.index), None)
+
+            if not step_to_edit:
+                print(f"Error: Step ID {args.index} not found.")
+                return
+            if args.name:
+                step_to_edit['name'] = args.name
+            if args.duration is not None:
+                if args.duration <= 0:
+                    print("Error: Duration must be positive.")
+                    return
+                step_to_edit['duration'] = args.duration
+            if args.deps is not None:
+                existing_ids = [s.get('index') for s in recipe_list]
+                clean_deps = [int(d) for d in args.deps if d.isdigit() and int(d) in existing_ids]
+                old_deps = step_to_edit['deps']
+                step_to_edit['deps'] = clean_deps
+
+                if has_cycle(recipe_list):
+                    print("Error: Circular dependency detected with these new deps!")
+                    step_to_edit['deps'] = old_deps
+                    return
+
+            # 3. Save the updated list
+            with open(output_file, "w") as f:
+                json.dump(recipe_list, f, indent=4)
 
 
 if __name__ == "__main__":
